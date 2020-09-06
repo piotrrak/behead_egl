@@ -67,6 +67,11 @@ BHD_EXPORT EGLDisplay create_headless_display(DrmNodeUsage = DefaultDrmNodeUsage
 
 BHD_EXPORT bool enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt = DefaultEnumerateOpt);
 
+// BEWARE: This function has very long name for a reason!
+// It may ever work for EGLDisplay initialized by eglInitialize() and before eglTerminate().
+// See EGL_EXT_device_query specification eglQueryDisplayAttribEXT for more details.
+BHD_EXPORT DeviceEXT_Info get_initialized_display_device_info(EGLDisplay dpy);
+
 }
 
 #endif // !defined(BEHEAD_EGL_include_bhd_behead_egl_hh_included_)

@@ -38,6 +38,26 @@ int main()
 
    std::cout << "EGL initialized" << std::endl;
 
+   auto info = bhd::get_initialized_display_device_info(dpy1);
+
+   if (info.egl_device_ext == EGL_NO_DEVICE_EXT)
+   {
+      std::cerr << "Failed to query device info for EGLDisplay" << std::endl;
+   }
+   else
+   {
+      if (info.has_NV_device_cuda)
+      {
+         std::cout << "Device associated with this EGLDisplay"
+                      " supports CUDA (id: " << info.cuda_dev_id.value() << ")" << std::endl;
+      }
+      else
+      {
+         std::cout << "Device associated with this EGLDisplay doesn't support CUDA" << std::endl;
+      }
+   }
+
+
    eglTerminate(dpy1);
 
    std::cout << "EGL terminated" << std::endl;

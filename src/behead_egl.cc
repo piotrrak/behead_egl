@@ -185,6 +185,8 @@ struct BeheadEGL final
 
    static bool enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt opt);
 
+   static DeviceEXT_Info get_display_device_info(EGLDisplay dpy);
+
 public:
    // NB: This is not class, it is a module.
    // It's declared as class for convinience of providing scope for EGL extension
@@ -590,6 +592,38 @@ bool BeheadEGL::enumerate_display_devices(const device_enumeration_cb_t &cb, Enu
    return false;
 }
 
+DeviceEXT_Info BeheadEGL::get_display_device_info(EGLDisplay dpy)
+{
+   DeviceEXT_Info ret;
+
+   if (dpy == EGL_NO_DISPLAY)
+      return ret;
+
+   if (!_ensure_client_extensions())
+      return ret;
+
+   EGLDeviceEXT dev = nullptr;
+   EGLAttrib *dev_attrib = reinterpret_cast<EGLAttrib *>(&dev);
+
+   if (_eglQueryDisplayAttribEXT(dpy, EGL_DEVICE_EXT, dev_attrib) != EGL_TRUE)
+      return ret;
+
+   assert(dev != nullptr);
+
+   try
+   {
+      ret = _query_device_info(dev);
+   }
+   catch (const runtime_egl_error &e)
+   {
+       std::cerr << "Failed to query device capabilities" << std::endl;
+       std::cerr << e.what() << " (EGLError: " << e.egl_error << ")" << std::endl;
+   }
+
+   return ret;
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // DisplayCreationStrategy implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -780,6 +814,20 @@ bool enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt o
    }
 
    return false;
+}
+
+DeviceEXT_Info get_initialized_display_device_info(EGLDisplay dpy)
+{
+   try
+   {
+       return BeheadEGL::get_display_device_info(dpy);
+   }
+   catch (...)
+   {
+      assert(false && "Leaked exception");
+   }
+
+   return DeviceEXT_Info{};
 }
 
 } // namespace behead_egl
