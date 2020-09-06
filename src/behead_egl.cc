@@ -182,6 +182,7 @@ struct BeheadEGL final
    static bool check_support();
 
    static EGLDisplay create_headless_display(DrmNodeUsage node_usage);
+
    static bool enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt opt);
 
 public:
@@ -238,6 +239,7 @@ private:
    // EXT_device_query
    static inline PFNEGLQUERYDEVICEATTRIBEXTPROC _eglQueryDeviceAttribEXT = nullptr;
    static inline PFNEGLQUERYDEVICESTRINGEXTPROC _eglQueryDeviceStringEXT = nullptr;
+   static inline PFNEGLQUERYDISPLAYATTRIBEXTPROC _eglQueryDisplayAttribEXT = nullptr;
 
    // EGL_EXT_platform_base
    static inline PFNEGLGETPLATFORMDISPLAYEXTPROC _eglGetPlatformDisplayEXT = nullptr;
@@ -284,6 +286,7 @@ void BeheadEGL::_do_init_egl_client_procs(bool (*_assert_caller)())
       _egl_proc(eglQueryDevicesEXT),
       _egl_proc(eglQueryDeviceAttribEXT),
       _egl_proc(eglQueryDeviceStringEXT),
+      _egl_proc(eglQueryDisplayAttribEXT),
       _egl_proc(eglGetPlatformDisplayEXT)
 #undef _egl_proc
    );
