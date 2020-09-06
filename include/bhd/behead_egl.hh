@@ -18,9 +18,15 @@
 namespace behead_egl
 {
 
-BHD_EXPORT bool check_headless_display_support();
+enum class DrmNodeUsage
+{
+   UsePrimary,
+   UseRender,
+   UsePrimaryFallbackToRender,
+   UseRenderFallbackToPrimary,
+};
 
-BHD_EXPORT EGLDisplay create_headless_display();
+constexpr DrmNodeUsage DefaultDrmNodeUsage = DrmNodeUsage::UseRenderFallbackToPrimary;
 
 struct DeviceEXT_Info
 {
@@ -40,5 +46,8 @@ public:
    opt_int      cuda_dev_id               = std::nullopt;
 };
 
-}
+BHD_EXPORT bool check_headless_display_support();
 
+BHD_EXPORT EGLDisplay create_headless_display(DrmNodeUsage = DefaultDrmNodeUsage);
+
+}

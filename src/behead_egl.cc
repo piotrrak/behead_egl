@@ -155,14 +155,6 @@ pick_display_device_ext(const VecDevInfos &device_infos)
    return picked_dev;
 }
 
-enum class DrmNodeUsage
-{
-   UsePrimary,
-   UseRender,
-   UsePrimaryFallbackToRender,
-   UseRenderFallbackToPrimary,
-};
-
 namespace behead_egl::internal {
 
 struct DisplayCreationStrategy
@@ -721,10 +713,8 @@ bool check_headless_display_support()
    return BeheadEGL::check_support();
 }
 
-EGLDisplay create_headless_display()
+EGLDisplay create_headless_display(DrmNodeUsage node_usage)
 {
-   const auto node_usage = DrmNodeUsage::UseRenderFallbackToPrimary;
-
    try
    {
       return BeheadEGL::create_headless_display(node_usage);
