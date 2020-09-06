@@ -163,171 +163,26 @@ enum class DrmNodeUsage
    UseRenderFallbackToPrimary,
 };
 
+namespace behead_egl::internal {
+
 struct DisplayCreationStrategy
 {
    explicit DisplayCreationStrategy(DrmNodeUsage usage) noexcept:
      _node_usage(usage) {}
 
-   bhdi::DrmNodeFlag get_open_flag() const;
+   DrmNodeFlag get_open_flag() const;
 
    bool has_fallback() const;
 
-   bhdi::DrmNodeFlag node_flag() const;
-   bhdi::DrmNodeFlag fallback_node_flag() const;
+   DrmNodeFlag node_flag() const;
+   DrmNodeFlag fallback_node_flag() const;
 
-   bhdi::unique_fd take_node_fd(bhdi::DrmNodeFds& fds) const;
-   bhdi::unique_fd take_fallback_node_fd(bhdi::DrmNodeFds& fds) const;
+   unique_fd take_node_fd(DrmNodeFds& fds) const;
+   unique_fd take_fallback_node_fd(DrmNodeFds& fds) const;
 
 private:
    const DrmNodeUsage _node_usage;
 };
-
-bhdi::DrmNodeFlag DisplayCreationStrategy::get_open_flag() const
-{
-   using bhdi::DrmNodeFlag;
-   using bhdi::BothDrmNodes;
-
-   switch (_node_usage)
-   {
-   // Just node we need
-   case DrmNodeUsage::UsePrimary:
-      return DrmNodeFlag::Primary;
-
-   case DrmNodeUsage::UseRender:
-      return DrmNodeFlag::Render;
-
-   // Need to open both
-   case DrmNodeUsage::UseRenderFallbackToPrimary:
-      [[fallthrough]];
-
-   case DrmNodeUsage::UsePrimaryFallbackToRender:
-      return BothDrmNodes;
-   }
-
-   assert(false && "Unreachable");
-   throw std::logic_error("Unreachable");
-}
-
-bool DisplayCreationStrategy::has_fallback() const
-{
-   using bhdi::DrmNodeFlag;
-   using bhdi::BothDrmNodes;
-
-   switch (_node_usage)
-   {
-   // No fallback
-   case DrmNodeUsage::UsePrimary:
-      [[fallthrough]];
-
-   case DrmNodeUsage::UseRender:
-      return false;
-
-   // Has fallback
-   case DrmNodeUsage::UseRenderFallbackToPrimary:
-      [[fallthrough]];
-
-   case DrmNodeUsage::UsePrimaryFallbackToRender:
-      return true;
-   }
-
-   assert(false && "Unreachable");
-   throw std::logic_error("Unreachable");
-}
-
-bhdi::DrmNodeFlag DisplayCreationStrategy::node_flag() const
-{
-   using bhdi::DrmNodeFlag;
-
-   switch (_node_usage)
-   {
-   case DrmNodeUsage::UsePrimary:
-      [[fallthrough]];
-
-   case DrmNodeUsage::UsePrimaryFallbackToRender:
-      return DrmNodeFlag::Primary;
-
-   case DrmNodeUsage::UseRender:
-      [[fallthrough]];
-
-   case DrmNodeUsage::UseRenderFallbackToPrimary:
-      return DrmNodeFlag::Render;
-   }
-
-   assert(false && "Unreachable");
-   throw std::logic_error("Unreachable");
-}
-
-bhdi::DrmNodeFlag DisplayCreationStrategy::fallback_node_flag() const
-{
-   assert(has_fallback());
-
-   using bhdi::DrmNodeFlag;
-
-   switch (_node_usage)
-   {
-   case DrmNodeUsage::UsePrimaryFallbackToRender:
-      return DrmNodeFlag::Render;
-   case DrmNodeUsage::UseRenderFallbackToPrimary:
-      return DrmNodeFlag::Primary;
-
-   case DrmNodeUsage::UsePrimary:
-      break;
-
-   case DrmNodeUsage::UseRender:
-      break;
-   }
-
-   assert(false && "Unreachable");
-   throw std::logic_error("Unreachable");
-}
-
-bhdi::unique_fd DisplayCreationStrategy::take_node_fd(bhdi::DrmNodeFds& fds) const
-{
-   switch (_node_usage)
-   {
-   case DrmNodeUsage::UsePrimary:
-      [[fallthrough]];
-
-   case DrmNodeUsage::UsePrimaryFallbackToRender:
-      assert(fds.primary_fd.ok());
-      return std::move(fds.primary_fd);
-
-   case DrmNodeUsage::UseRender:
-      [[fallthrough]];
-
-   case DrmNodeUsage::UseRenderFallbackToPrimary:
-      assert(fds.render_fd.ok());
-      return std::move(fds.render_fd);
-   }
-
-   assert(false && "Unreachable");
-   throw std::logic_error("Unreachable");
-}
-
-bhdi::unique_fd DisplayCreationStrategy::take_fallback_node_fd(bhdi::DrmNodeFds& fds) const
-{
-   assert(has_fallback());
-
-   switch (_node_usage)
-   {
-   case DrmNodeUsage::UsePrimaryFallbackToRender:
-      assert(fds.render_fd.ok());
-      return std::move(fds.render_fd);
-
-   case DrmNodeUsage::UseRenderFallbackToPrimary:
-      assert(fds.primary_fd.ok());
-      return std::move(fds.primary_fd);
-
-   case DrmNodeUsage::UseRender:
-      break;
-
-   case DrmNodeUsage::UsePrimary:
-      break;
-   }
-
-   assert(false && "Unreachable");
-   throw std::logic_error("Unreachable");
-}
 
 struct BeheadEGL final
 {
@@ -371,9 +226,9 @@ private:
    // Creates platform_device EGLDisplay using file descriptor for device dev
    //
    // may throw runtime_egl_error
-   static EGLDisplay _create_platform_device_display_fd(const bhdi::unique_fd &fd, EGLDeviceEXT dev);
+   static EGLDisplay _create_platform_device_display_fd(const unique_fd &fd, EGLDeviceEXT dev);
 
-   static EGLDisplay _create_display_fd(const bhdi::unique_fd &fd, bhdi::DrmNodeFlag node, EGLDeviceEXT dev);
+   static EGLDisplay _create_display_fd(const unique_fd &fd, DrmNodeFlag node, EGLDeviceEXT dev);
 
 private:
    // Protects EGL extension function pointers
@@ -442,6 +297,10 @@ void BeheadEGL::_do_init_egl_client_procs(bool (*_assert_caller)())
    // we carry dependency one _set_egl_proc stores
    _client_procs_ok.store(ok, std::memory_order_release);
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// BeheadEGL implementation
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool BeheadEGL::_ensure_client_extensions()
 {
@@ -564,7 +423,7 @@ VecDevInfos BeheadEGL::_collect_device_ext_infos(const VecDevEXT &devices)
 }
 
 EGLDisplay
-BeheadEGL::_create_platform_device_display_fd(const bhdi::unique_fd& fd, EGLDeviceEXT dev)
+BeheadEGL::_create_platform_device_display_fd(const unique_fd& fd, EGLDeviceEXT dev)
 {
    assert(_client_procs_ok);
 
@@ -646,7 +505,7 @@ EGLDisplay BeheadEGL::create_headless_display(DrmNodeUsage node_usage)
    {
       DisplayCreationStrategy strategy(node_usage);
 
-      auto nodes = bhdi::open_drm_nodes(picked->drm_path, strategy.get_open_flag());
+      auto nodes = open_drm_nodes(picked->drm_path, strategy.get_open_flag());
 
       // Take primary or render node fd, depending on strategy
       auto node_fd = strategy.take_node_fd(nodes);
@@ -677,11 +536,11 @@ EGLDisplay BeheadEGL::create_headless_display(DrmNodeUsage node_usage)
    return EGL_NO_DISPLAY;
 }
 
-EGLDisplay BeheadEGL::_create_display_fd(const bhdi::unique_fd &fd, bhdi::DrmNodeFlag node, EGLDeviceEXT dev)
+EGLDisplay BeheadEGL::_create_display_fd(const unique_fd &fd, DrmNodeFlag node, EGLDeviceEXT dev)
 {
    assert(fd.ok());
    assert(dev);
-   assert(node == bhdi::DrmNodeFlag::Primary || node == bhdi::DrmNodeFlag::Render);
+   assert(node == DrmNodeFlag::Primary || node == DrmNodeFlag::Render);
 
    const char* node_type = to_string(node);
    EGLDisplay dpy = EGL_NO_DISPLAY;
@@ -705,8 +564,157 @@ EGLDisplay BeheadEGL::_create_display_fd(const bhdi::unique_fd &fd, bhdi::DrmNod
    return dpy;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// DisplayCreationStrategy implementation
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+DrmNodeFlag DisplayCreationStrategy::get_open_flag() const
+{
+   switch (_node_usage)
+   {
+   // Just node we need
+   case DrmNodeUsage::UsePrimary:
+      return DrmNodeFlag::Primary;
+
+   case DrmNodeUsage::UseRender:
+      return DrmNodeFlag::Render;
+
+   // Need to open both
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return BothDrmNodes;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+bool DisplayCreationStrategy::has_fallback() const
+{
+   switch (_node_usage)
+   {
+   // No fallback
+   case DrmNodeUsage::UsePrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UseRender:
+      return false;
+
+   // Has fallback
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return true;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+DrmNodeFlag DisplayCreationStrategy::node_flag() const
+{
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return DrmNodeFlag::Primary;
+
+   case DrmNodeUsage::UseRender:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      return DrmNodeFlag::Render;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+DrmNodeFlag DisplayCreationStrategy::fallback_node_flag() const
+{
+   assert(has_fallback());
+
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return DrmNodeFlag::Render;
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      return DrmNodeFlag::Primary;
+
+   case DrmNodeUsage::UsePrimary:
+      break;
+
+   case DrmNodeUsage::UseRender:
+      break;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+unique_fd DisplayCreationStrategy::take_node_fd(DrmNodeFds& fds) const
+{
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      assert(fds.primary_fd.ok());
+      return std::move(fds.primary_fd);
+
+   case DrmNodeUsage::UseRender:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      assert(fds.render_fd.ok());
+      return std::move(fds.render_fd);
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+unique_fd DisplayCreationStrategy::take_fallback_node_fd(DrmNodeFds& fds) const
+{
+   assert(has_fallback());
+
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      assert(fds.render_fd.ok());
+      return std::move(fds.render_fd);
+
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      assert(fds.primary_fd.ok());
+      return std::move(fds.primary_fd);
+
+   case DrmNodeUsage::UseRender:
+      break;
+
+   case DrmNodeUsage::UsePrimary:
+      break;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+} // behead_egl::internal
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Public API implementation
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 namespace behead_egl
 {
+
+using bhdi::BeheadEGL;
 
 bool check_headless_display_support()
 {
