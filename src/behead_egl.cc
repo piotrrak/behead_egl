@@ -180,7 +180,9 @@ struct BeheadEGL final
 {
    // Public API
    static bool check_support();
+
    static EGLDisplay create_headless_display(DrmNodeUsage node_usage);
+   static bool enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt opt);
 
 public:
    // NB: This is not class, it is a module.
@@ -399,8 +401,8 @@ VecDevInfos BeheadEGL::_collect_device_ext_infos(const VecDevEXT &devices)
           std::cerr << "Failed to query device capabilities" << std::endl;
           std::cerr << e.what() << " (EGLError: " << e.egl_error << ")" << std::endl;
 
-          // Skipping device, those are might be API violations
-          // Advertised extension did not return result;
+          // Skipping device in release mode, those are might be API violations
+          // Advertised extension did not return correct result;
           assert(false && "Bogus EGLDeviceEXT from EGL");
 
           // TODO: WARN or rethrow?
@@ -556,6 +558,35 @@ EGLDisplay BeheadEGL::_create_display_fd(const unique_fd &fd, DrmNodeFlag node, 
    return dpy;
 }
 
+bool BeheadEGL::enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt opt)
+{
+   assert(!!cb);
+
+   if (!_ensure_client_extensions())
+      return false;
+
+   try
+   {
+       const auto devices = _enumerate_devices_ext();
+       const auto infos = _collect_device_ext_infos(devices);
+
+       for (const auto &nfo : infos)
+       {
+          if (opt == EnumerateOpt::All || nfo.has_EXT_device_drm)
+             cb(nfo);
+       }
+
+       return true;
+   }
+   catch (const runtime_egl_error &e)
+   {
+      std::cerr << "Couldn't query any device capabilities" << std::endl;
+      std::cerr << e.what() << " (EGLError: " << e.egl_error << ")" << std::endl;
+   }
+
+   return false;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // DisplayCreationStrategy implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -649,7 +680,7 @@ DrmNodeFlag DisplayCreationStrategy::fallback_node_flag() const
    throw std::logic_error("Unreachable");
 }
 
-unique_fd DisplayCreationStrategy::take_node_fd(DrmNodeFds& fds) const
+unique_fd DisplayCreationStrategy::take_node_fd(DrmNodeFds &fds) const
 {
    switch (_node_usage)
    {
@@ -672,7 +703,7 @@ unique_fd DisplayCreationStrategy::take_node_fd(DrmNodeFds& fds) const
    throw std::logic_error("Unreachable");
 }
 
-unique_fd DisplayCreationStrategy::take_fallback_node_fd(DrmNodeFds& fds) const
+unique_fd DisplayCreationStrategy::take_fallback_node_fd(DrmNodeFds &fds) const
 {
    assert(has_fallback());
 
@@ -729,6 +760,23 @@ EGLDisplay create_headless_display(DrmNodeUsage node_usage)
    }
 
    return EGL_NO_DISPLAY;
+}
+
+bool enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt opt)
+{
+   if (!cb)
+      return false;
+
+   try
+   {
+      return BeheadEGL::enumerate_display_devices(cb, opt);
+   }
+   catch (...)
+   {
+      assert(false && "Leaked exception");
+   }
+
+   return false;
 }
 
 } // namespace behead_egl

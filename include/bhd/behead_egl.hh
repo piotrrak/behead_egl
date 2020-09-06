@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 #include <optional>
 
 #define EGL_NO_X11
@@ -28,6 +29,14 @@ enum class DrmNodeUsage
 
 constexpr DrmNodeUsage DefaultDrmNodeUsage = DrmNodeUsage::UseRenderFallbackToPrimary;
 
+enum class EnumerateOpt
+{
+   All,
+   Usable,
+};
+
+const EnumerateOpt DefaultEnumerateOpt = EnumerateOpt::All;
+
 struct DeviceEXT_Info
 {
 private:
@@ -46,8 +55,14 @@ public:
    opt_int      cuda_dev_id               = std::nullopt;
 };
 
+
+using device_enumeration_cb_t = std::function<void (const DeviceEXT_Info &)>;
+
+
 BHD_EXPORT bool check_headless_display_support();
 
 BHD_EXPORT EGLDisplay create_headless_display(DrmNodeUsage = DefaultDrmNodeUsage);
+
+BHD_EXPORT bool enumerate_display_devices(const device_enumeration_cb_t &cb, EnumerateOpt = DefaultEnumerateOpt);
 
 }

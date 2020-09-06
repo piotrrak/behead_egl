@@ -8,6 +8,20 @@ namespace bhd = behead_egl;
 
 int main()
 {
+   std::cout << "Available devices are: " << std::endl;
+
+   bool ok = bhd::enumerate_display_devices(
+      [num=0] (const bhd::DeviceEXT_Info &info) mutable {
+
+         std::cout << "Card #" << num++ << std::endl;
+         std::cout << "\tsupports: " << info.device_extensions << std::endl;
+   });
+
+   if (ok)
+      std::cout << std::endl;
+   else
+      std::cerr << "Failed to enumerate available cards" << std::endl;
+
    EGLDisplay dpy1 = bhd::create_headless_display();
 
    assert(dpy1 != EGL_NO_DISPLAY);
