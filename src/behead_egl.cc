@@ -199,6 +199,8 @@ private:
    // may throw runtime_egl_error
    static EGLDisplay _create_platform_device_display_fd(const bhdi::unique_fd &fd, EGLDeviceEXT dev);
 
+   static EGLDisplay _create_display_fd(const bhdi::unique_fd &fd, bhdi::DrmNodeFlag node, EGLDeviceEXT dev);
+
 private:
    // Protects EGL extension function pointers
    static inline std::once_flag _client_egl_procs_flag;
@@ -413,7 +415,8 @@ bool BeheadEGL::check_support()
    }
    catch (...)
    {
-      // TODO: something very wrong
+      // TODO: something very wrong if we get here.
+      assert(false);
    }
 
    return false;
@@ -461,57 +464,66 @@ EGLDisplay BeheadEGL::create_headless_display()
 
    EGLDisplay dpy = EGL_NO_DISPLAY;
 
-   //bhdi::unique_fd render_fd;
-   //bhdi::unique_fd primary_fd;
+   //bhdi::unique_fd render_fd, primary_fd;
+
+   EGLDeviceEXT device = picked->egl_device_ext;
+
+   assert(device);
 
    try
    {
       auto nodes = bhdi::open_drm_nodes(picked->drm_path);
 
+      assert(nodes.ok());
+
       //render_fd = std::move(nodes.render_fd);
       //primary_fd = std::move(nodes.primary_fd);
 
-      assert(nodes.ok());
+      // Try create display for render node
+      dpy = _create_display_fd(nodes.render_fd, bhdi::DrmNodeFlag::Render, device);
 
-      EGLDeviceEXT device = picked->egl_device_ext;
+      if (dpy != EGL_NO_DISPLAY)
+         return dpy;
 
-      assert(device);
+      // Fallback to primary
+      dpy = _create_display_fd(nodes.primary_fd, bhdi::DrmNodeFlag::Primary, device);
 
-      try
-      {
-         // Try create display for render node
-         dpy = _create_platform_device_display_fd(nodes.render_fd, device);
-      }
-      catch (const runtime_egl_error &e)
-      {
-         // WARNING
-         std::cerr << "Failed to create EGLDisplay for render node" << std::endl;
-         std::cerr << e.what() << " (EGLError: " << e.egl_error << ")" << std::endl;
-
-         try
-         {
-            // Retry for primary node
-            dpy = _create_platform_device_display_fd(nodes.primary_fd, device);
-         }
-         catch (const runtime_egl_error &e)
-         {
-            std::cerr << "Failed to create EGLDisplay for primary node" << std::endl;
-            std::cerr << e.what() << " (EGLError: " << e.egl_error << ")" << std::endl;
-
-            // Give up
-            return EGL_NO_DISPLAY;
-         }
-      }
+      if (dpy != EGL_NO_DISPLAY)
+         return dpy;
    }
    catch (const runtime_error &e)
    {
       std::cerr << "Failed to create EGLDisplay" << std::endl;
       std::cerr << e.what() << std::endl;
-
-      return EGL_NO_DISPLAY;
    }
 
-   assert(dpy != EGL_NO_DISPLAY);
+   return EGL_NO_DISPLAY;
+}
+
+EGLDisplay BeheadEGL::_create_display_fd(const bhdi::unique_fd &fd, bhdi::DrmNodeFlag node, EGLDeviceEXT dev)
+{
+   assert(fd.ok());
+   assert(dev);
+   assert(node == bhdi::DrmNodeFlag::Primary || node == bhdi::DrmNodeFlag::Render);
+
+   const char* node_type = to_string(node);
+   EGLDisplay dpy = EGL_NO_DISPLAY;
+   try
+   {
+      // Try create display
+      dpy = _create_platform_device_display_fd(fd, dev);
+   }
+   catch (const runtime_egl_error &e)
+   {
+      // WARNING
+      std::cerr << "Failed to create EGLDisplay for " << node_type << " node" << std::endl;
+      std::cerr << e.what() << " (EGLError: " << e.egl_error << ")" << std::endl;
+   }
+   catch (const runtime_error &e)
+   {
+      std::cerr << "Failed to create EGLDisplay" << std::endl;
+      std::cerr << e.what() << std::endl;
+   }
 
    return dpy;
 }
