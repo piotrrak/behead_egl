@@ -155,11 +155,185 @@ pick_display_device_ext(const VecDevInfos &device_infos)
    return picked_dev;
 }
 
+enum class DrmNodeUsage
+{
+   UsePrimary,
+   UseRender,
+   UsePrimaryFallbackToRender,
+   UseRenderFallbackToPrimary,
+};
+
+struct DisplayCreationStrategy
+{
+   explicit DisplayCreationStrategy(DrmNodeUsage usage) noexcept:
+     _node_usage(usage) {}
+
+   bhdi::DrmNodeFlag get_open_flag() const;
+
+   bool has_fallback() const;
+
+   bhdi::DrmNodeFlag node_flag() const;
+   bhdi::DrmNodeFlag fallback_node_flag() const;
+
+   bhdi::unique_fd take_node_fd(bhdi::DrmNodeFds& fds) const;
+   bhdi::unique_fd take_fallback_node_fd(bhdi::DrmNodeFds& fds) const;
+
+private:
+   const DrmNodeUsage _node_usage;
+};
+
+bhdi::DrmNodeFlag DisplayCreationStrategy::get_open_flag() const
+{
+   using bhdi::DrmNodeFlag;
+   using bhdi::BothDrmNodes;
+
+   switch (_node_usage)
+   {
+   // Just node we need
+   case DrmNodeUsage::UsePrimary:
+      return DrmNodeFlag::Primary;
+
+   case DrmNodeUsage::UseRender:
+      return DrmNodeFlag::Render;
+
+   // Need to open both
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return BothDrmNodes;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+bool DisplayCreationStrategy::has_fallback() const
+{
+   using bhdi::DrmNodeFlag;
+   using bhdi::BothDrmNodes;
+
+   switch (_node_usage)
+   {
+   // No fallback
+   case DrmNodeUsage::UsePrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UseRender:
+      return false;
+
+   // Has fallback
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return true;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+bhdi::DrmNodeFlag DisplayCreationStrategy::node_flag() const
+{
+   using bhdi::DrmNodeFlag;
+
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return DrmNodeFlag::Primary;
+
+   case DrmNodeUsage::UseRender:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      return DrmNodeFlag::Render;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+bhdi::DrmNodeFlag DisplayCreationStrategy::fallback_node_flag() const
+{
+   assert(has_fallback());
+
+   using bhdi::DrmNodeFlag;
+
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      return DrmNodeFlag::Render;
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      return DrmNodeFlag::Primary;
+
+   case DrmNodeUsage::UsePrimary:
+      break;
+
+   case DrmNodeUsage::UseRender:
+      break;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+bhdi::unique_fd DisplayCreationStrategy::take_node_fd(bhdi::DrmNodeFds& fds) const
+{
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimary:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      assert(fds.primary_fd.ok());
+      return std::move(fds.primary_fd);
+
+   case DrmNodeUsage::UseRender:
+      [[fallthrough]];
+
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      assert(fds.render_fd.ok());
+      return std::move(fds.render_fd);
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
+bhdi::unique_fd DisplayCreationStrategy::take_fallback_node_fd(bhdi::DrmNodeFds& fds) const
+{
+   assert(has_fallback());
+
+   switch (_node_usage)
+   {
+   case DrmNodeUsage::UsePrimaryFallbackToRender:
+      assert(fds.render_fd.ok());
+      return std::move(fds.render_fd);
+
+   case DrmNodeUsage::UseRenderFallbackToPrimary:
+      assert(fds.primary_fd.ok());
+      return std::move(fds.primary_fd);
+
+   case DrmNodeUsage::UseRender:
+      break;
+
+   case DrmNodeUsage::UsePrimary:
+      break;
+   }
+
+   assert(false && "Unreachable");
+   throw std::logic_error("Unreachable");
+}
+
 struct BeheadEGL final
 {
    // Public API
    static bool check_support();
-   static EGLDisplay create_headless_display();
+   static EGLDisplay create_headless_display(DrmNodeUsage node_usage);
 
 public:
    // NB: This is not class, it is a module.
@@ -422,7 +596,7 @@ bool BeheadEGL::check_support()
    return false;
 }
 
-EGLDisplay BeheadEGL::create_headless_display()
+EGLDisplay BeheadEGL::create_headless_display(DrmNodeUsage node_usage)
 {
    if (!_ensure_client_extensions())
        return EGL_NO_DISPLAY;
@@ -464,32 +638,35 @@ EGLDisplay BeheadEGL::create_headless_display()
 
    EGLDisplay dpy = EGL_NO_DISPLAY;
 
-   //bhdi::unique_fd render_fd, primary_fd;
-
    EGLDeviceEXT device = picked->egl_device_ext;
 
    assert(device);
 
    try
    {
-      auto nodes = bhdi::open_drm_nodes(picked->drm_path, bhdi::BothDrmNodes);
+      DisplayCreationStrategy strategy(node_usage);
 
-      assert(nodes.ok());
+      auto nodes = bhdi::open_drm_nodes(picked->drm_path, strategy.get_open_flag());
 
-      //render_fd = std::move(nodes.render_fd);
-      //primary_fd = std::move(nodes.primary_fd);
+      // Take primary or render node fd, depending on strategy
+      auto node_fd = strategy.take_node_fd(nodes);
 
-      // Try create display for render node
-      dpy = _create_display_fd(nodes.render_fd, bhdi::DrmNodeFlag::Render, device);
-
-      if (dpy != EGL_NO_DISPLAY)
-         return dpy;
-
-      // Fallback to primary
-      dpy = _create_display_fd(nodes.primary_fd, bhdi::DrmNodeFlag::Primary, device);
+      // Try create display for node
+      dpy = _create_display_fd(node_fd, strategy.node_flag(), device);
 
       if (dpy != EGL_NO_DISPLAY)
          return dpy;
+
+      // Try fallback node if strategy requires it
+      if (strategy.has_fallback())
+      {
+         auto fallback_node_fd = strategy.take_node_fd(nodes);
+
+         dpy = _create_display_fd(fallback_node_fd, strategy.fallback_node_flag(), device);
+
+         if (dpy != EGL_NO_DISPLAY)
+            return dpy;
+      }
    }
    catch (const runtime_error &e)
    {
@@ -538,9 +715,11 @@ bool check_headless_display_support()
 
 EGLDisplay create_headless_display()
 {
+   const auto node_usage = DrmNodeUsage::UseRenderFallbackToPrimary;
+
    try
    {
-      return BeheadEGL::create_headless_display();
+      return BeheadEGL::create_headless_display(node_usage);
    }
    catch (const runtime_egl_error &e)
    {
@@ -555,4 +734,3 @@ EGLDisplay create_headless_display()
 }
 
 } // namespace behead_egl
-
