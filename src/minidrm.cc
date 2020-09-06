@@ -65,7 +65,7 @@ struct DeviceId
    }
 };
 
-static buffer<64> make_sysfs_path(DeviceId id)
+buffer<64> make_sysfs_path(DeviceId id)
 {
    return bprintf<64>("/sys/dev/char/%d:%d/device/drm/", id._major, id._minor);
 }
@@ -116,7 +116,8 @@ DrmNodeFds open_drm_nodes(const char *dev, DrmNodeFlag nodes)
    using namespace std::literals::string_literals;
    using std::runtime_error;
 
-   assert(nodes == BothDrmNodes && "Not implemented yet");
+   // No point calling it without any node specified
+   assert(has<DrmNodeFlag::Primary>(nodes) || has<DrmNodeFlag::Render>(nodes));
 
    // ::stat() the char device to ensure:
    // - ensure it exits
@@ -165,20 +166,30 @@ DrmNodeFds open_drm_nodes(const char *dev, DrmNodeFlag nodes)
       return node_fd;
    };
 
-   auto dev_card = make_drm_path(DrmNodeFlag::Primary, dev_id._minor);
-   auto dev_render = make_drm_path(DrmNodeFlag::Render, dev_id._minor);
+   DrmNodeFds result;
 
-   // Check for /sys/dev/char/<maj>:<min>/device/drm/card<min>
-   // Open /dev/dri/card<min
-   auto tmp_primary = access_sysfs_open_dri(dev_card.data());
+   if (has<DrmNodeFlag::Primary>(nodes))
+   {
+      auto dev_card = make_drm_path(DrmNodeFlag::Primary, dev_id._minor);
+      // Check for /sys/dev/char/<maj>:<min>/device/drm/card<min>
+      // Open /dev/dri/card<min
+      auto tmp_primary = access_sysfs_open_dri(dev_card.data());
+      assert(tmp_primary.ok());
+      result.primary_fd = std::move(tmp_primary);
+   }
 
-   // Check for /sys/dev/char/<maj>:<min>/device/drm/renderD<min+128>
-   // Open /dev/dri/renderD<min+128>
-   auto tmp_render = access_sysfs_open_dri(dev_render.data());
+   if (has<DrmNodeFlag::Render>(nodes))
+   {
+      auto dev_render = make_drm_path(DrmNodeFlag::Render, dev_id._minor);
 
-   assert(tmp_render.ok() && tmp_primary.ok());
+      // Check for /sys/dev/char/<maj>:<min>/device/drm/renderD<min+128>
+      // Open /dev/dri/renderD<min+128>
+      auto tmp_render = access_sysfs_open_dri(dev_render.data());
+      assert(tmp_render.ok());
+      result.render_fd = std::move(tmp_render);
+   }
 
-   return { std::move(tmp_render), std::move(tmp_primary)};
+   return result;
 }
 
 } // namespace behead_egl::internal

@@ -472,7 +472,7 @@ EGLDisplay BeheadEGL::create_headless_display()
 
    try
    {
-      auto nodes = bhdi::open_drm_nodes(picked->drm_path);
+      auto nodes = bhdi::open_drm_nodes(picked->drm_path, bhdi::BothDrmNodes);
 
       assert(nodes.ok());
 
