@@ -11,6 +11,7 @@
 #include <optional>
 
 #define EGL_NO_X11
+#define MESA_EGL_NO_X11_HEADERS
 #include <EGL/eglplatform.h>
 #include <EGL/egl.h>
 
