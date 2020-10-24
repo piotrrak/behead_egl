@@ -14,8 +14,9 @@
 #define MESA_EGL_NO_X11_HEADERS
 #include <EGL/eglplatform.h>
 #include <EGL/egl.h>
-
 #include <EGL/eglext.h>
+#undef MESA_EGL_NO_X11_HEADERS
+#undef EGL_NO_X11
 
 #define BHD_EXPORT [[gnu::visibility("default")]]
 

@@ -18,10 +18,12 @@
 
 // We don't want X11 headers
 #define EGL_NO_X11
+#define MESA_EGL_NO_X11_HEADERS
 #include <EGL/eglplatform.h>
 #include <EGL/egl.h>
-
 #include <EGL/eglext.h>
+#undef MESA_EGL_NO_X11_HEADERS
+#undef EGL_NO_X11
 
 namespace bhdi = behead_egl::internal;
 namespace bhd = behead_egl;
