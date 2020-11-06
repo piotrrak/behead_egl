@@ -249,7 +249,7 @@ private:
    static inline PFNEGLGETPLATFORMDISPLAYEXTPROC _eglGetPlatformDisplayEXT = nullptr;
 
    // EGL client extensions that are mandatory for us.
-   static const list_sv EXT_CLIENT_REQUIRED = {
+   inline static const list_sv EXT_CLIENT_REQUIRED = {
       "EGL_EXT_platform_base",
       "EGL_EXT_device_base",
       "EGL_EXT_device_query",
